@@ -2,6 +2,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json());
@@ -67,20 +68,38 @@ function parseUA(ua) {
 function logVisit(req) {
   const ua = req.headers['user-agent'] || '';
   const { os, browser, device } = parseUA(ua);
+  const id = crypto.randomUUID();
   visits.push({
+    id,
     ip: clientIp(req),
     ua,
     os, browser, device,
     ts: Date.now(),
-    path: req.path
+    path: req.path,
+    referrer: req.headers['referer'] || req.headers['referrer'] || null,
+    language: null, timezone: null, screen: null, viewport: null
   });
   if (visits.length > MAX_VISITS_STORED) visits = visits.slice(-MAX_VISITS_STORED);
   writeJSON(VISITS_FILE, visits);
+  return id;
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie;
+  const out = {};
+  if (!header) return out;
+  header.split(';').forEach(pair => {
+    const idx = pair.indexOf('=');
+    if (idx === -1) return;
+    out[pair.slice(0, idx).trim()] = decodeURIComponent(pair.slice(idx + 1).trim());
+  });
+  return out;
 }
 
 // ---------- Страницы (с логированием посещений) ----------
 app.get(['/', '/activ'], (req, res, next) => {
-  logVisit(req);
+  const vid = logVisit(req);
+  res.setHeader('Set-Cookie', `vid=${vid}; Path=/; Max-Age=60; SameSite=Lax`);
   next();
 });
 
@@ -180,10 +199,32 @@ app.post('/api/comments/:id/vote', (req, res) => {
 });
 
 // ---------- Лог посещений (/activ) ----------
+app.post('/api/visits/detail', (req, res) => {
+  const cookies = parseCookies(req);
+  const vid = cookies.vid || (req.body && req.body.vid);
+  if (!vid) return res.json({ ok: false });
+  // ищем среди последних записей — обычно это самая свежая запись для этого браузера
+  for (let i = visits.length - 1; i >= Math.max(0, visits.length - 50); i--) {
+    if (visits[i].id === vid) {
+      const { referrer, language, timezone, screen, viewport } = req.body || {};
+      if (referrer && !visits[i].referrer) visits[i].referrer = referrer;
+      visits[i].language = language || null;
+      visits[i].timezone = timezone || null;
+      visits[i].screen = screen || null;
+      visits[i].viewport = viewport || null;
+      writeJSON(VISITS_FILE, visits);
+      break;
+    }
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/visits', (req, res) => {
   res.json({
     visits: visits.slice().reverse().map(v => ({
-      ip: v.ip, os: v.os, browser: v.browser, device: v.device, ts: v.ts, path: v.path
+      ip: v.ip, os: v.os, browser: v.browser, device: v.device, ts: v.ts, path: v.path,
+      referrer: v.referrer || null, language: v.language || null,
+      timezone: v.timezone || null, screen: v.screen || null, viewport: v.viewport || null
     }))
   });
 });
