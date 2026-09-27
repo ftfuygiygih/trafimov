@@ -1,1 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Стена</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
 
+  <!-- ===================== ГЕРОЙ-БЛОК С ЗИМНИМ ФОНОМ ===================== -->
+  <section class="hero">
+    <canvas id="snow-canvas"></canvas>
+    <svg class="garland" viewBox="0 0 1200 90" preserveAspectRatio="none" aria-hidden="true">
+      <path id="garland-wire" d="M0,20 C150,80 300,-10 450,40 C600,90 750,-10 900,40 C1000,75 1100,10 1200,30" />
+    </svg>
+    <div id="garland-bulbs" class="garland-bulbs"></div>
+
+    <div class="hero-content">
+      <div class="avatar-ring">
+        <img id="owner-avatar" src="/avatar.png" alt="Аватар" onerror="this.src='/default-avatar.svg'" />
+      </div>
+      <h1 id="owner-name">Загрузка…</h1>
+      <p class="hero-sub">❄ добро пожаловать на мою стену ❄</p>
+    </div>
+
+    <button id="scroll-cue" class="scroll-cue" aria-label="Пролистать к стене">
+      <span>Стена</span>
+      <svg width="20" height="20" viewBox="0 0 20 20"><path d="M4 7l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </section>
+
+  <!-- ===================== СТЕНА ===================== -->
+  <main class="wall">
+    <div class="wall-inner">
+
+      <form id="comment-form" class="comment-form">
+        <h2>Оставить запись</h2>
+        <input type="text" id="name-input" placeholder="Ваше имя" maxlength="40" autocomplete="off" />
+        <textarea id="text-input" placeholder="Что хотите написать…" maxlength="800" rows="3"></textarea>
+        <div class="form-row">
+          <span id="form-error" class="form-error"></span>
+          <button type="submit" id="submit-btn">Опубликовать</button>
+        </div>
+        <div id="cooldown-note" class="cooldown-note hidden"></div>
+      </form>
+
+      <div id="comments-list" class="comments-list"></div>
+      <div id="comments-empty" class="comments-empty hidden">Пока пусто — будьте первым, кто напишет здесь ❄</div>
+    </div>
+  </main>
+
+  <footer class="wall-footer">
+    <a href="/activ">Журнал посещений</a>
+  </footer>
+
+  <script src="/client.js"></script>
+</body>
+</html>
