@@ -155,11 +155,36 @@
     document.title = cfg.ownerName + ' — стена';
   }).catch(() => { $('owner-name').textContent = 'Стена'; });
 
+  // ================= Иконки соцсетей =================
+  fetch('/api/socials').then(r => r.json()).then(res => {
+    const wrap = $('hero-socials');
+    res.socials.forEach(s => {
+      const a = document.createElement('a');
+      a.className = 'social-icon';
+      a.href = s.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.title = s.label;
+      if (s.hasIcon) {
+        const img = document.createElement('img');
+        img.src = '/social-icon/' + s.key;
+        img.alt = s.label;
+        a.appendChild(img);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'social-badge';
+        span.textContent = s.badge;
+        a.appendChild(span);
+      }
+      wrap.appendChild(a);
+    });
+  }).catch(() => {});
+
   // ================= Тосты (Steam-style) + звук уведомлений =================
   const toastContainer = $('toast-container');
-  function showToast(title, subtitle, icon) {
+  function showToast(title, subtitle, icon, type) {
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.className = 'toast type-' + (type || 'comment');
     toast.innerHTML = `
       <div class="toast-game-row"><span class="dot"></span>Стена</div>
       <div class="toast-body">
@@ -176,9 +201,35 @@
     const audio = new Audio('/notify-sound');
     audio.play().catch(() => {}); // если звук не загружен в sound-source/ — просто молчим
   }
-  function notify(title, subtitle, icon) {
-    showToast(title, subtitle, icon);
+  function notify(title, subtitle, icon, type) {
+    showToast(title, subtitle, icon, type);
     playNotifySound();
+  }
+
+  // ================= Взрыв частиц + вспышка карточки при голосовании =================
+  function burst(x, y, color) {
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 36 + Math.random() * 48;
+      const p = document.createElement('div');
+      p.className = 'burst-particle';
+      p.style.left = x + 'px';
+      p.style.top = y + 'px';
+      p.style.setProperty('--tx', (Math.cos(angle) * dist).toFixed(1) + 'px');
+      p.style.setProperty('--ty', (Math.sin(angle) * dist).toFixed(1) + 'px');
+      p.style.background = color;
+      p.style.color = color;
+      document.body.appendChild(p);
+      p.addEventListener('animationend', () => p.remove());
+    }
+  }
+  function flashCard(card, type) {
+    const cls = type === 'up' ? 'flash-up' : 'flash-down';
+    card.classList.remove('flash-up', 'flash-down');
+    void card.offsetWidth; // рестарт анимации
+    card.classList.add(cls);
+    card.addEventListener('animationend', () => card.classList.remove(cls), { once: true });
   }
 
   // ================= Комментарии (+ ответы, сортировка) =================
@@ -340,7 +391,7 @@
         wrap.classList.remove('open');
         loadComments();
         startCooldown(res.cooldownRemainingMs);
-        notify('Ответ опубликован', 'Добавлен в тред', '↩');
+        notify('Ответ опубликован', 'Добавлен в тред', '↩', 'reply');
       }).catch(() => { btn.disabled = false; err.textContent = 'Ошибка сети'; });
     });
 
@@ -357,14 +408,23 @@
       downBtn.querySelector('span').textContent = res.down;
       upBtn.classList.toggle('active', res.myVote === 'up');
       downBtn.classList.toggle('active', res.myVote === 'down');
+
+      const card = upBtn.closest('.comment-card');
+      const btnRect = (type === 'up' ? upBtn : downBtn).getBoundingClientRect();
+      const cx = btnRect.left + btnRect.width / 2;
+      const cy = btnRect.top + btnRect.height / 2;
+
       if (wasActive) {
-        notify('Голос снят', 'Оценка обновлена', '↩');
+        notify('Голос снят', 'Оценка обновлена', '↩', 'neutral');
       } else {
         notify(
           type === 'up' ? 'Лайк поставлен' : 'Дизлайк поставлен',
           'Оценка обновлена',
-          type === 'up' ? '👍' : '👎'
+          type === 'up' ? '👍' : '👎',
+          type
         );
+        burst(cx, cy, type === 'up' ? '#5fd68a' : '#e0687a');
+        if (card) flashCard(card, type);
       }
       // держим локальный список в актуальном состоянии для пересортировки
       const c = lastComments.find(x => x.id === id);
@@ -425,7 +485,7 @@
       textInput.value = '';
       loadComments();
       startCooldown(res.cooldownRemainingMs);
-      notify('Комментарий опубликован', 'Запись появилась на стене', '✅');
+      notify('Комментарий опубликован', 'Запись появилась на стене', '✅', 'comment');
     }).catch(() => { formError.textContent = 'Ошибка сети, попробуйте ещё раз'; submitBtn.disabled = false; });
   });
 

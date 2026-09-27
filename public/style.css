@@ -72,7 +72,27 @@ button{ font-family:inherit; }
 }
 @keyframes icicle-shimmer{ 0%,100%{ opacity:.6;} 50%{ opacity:.95;} }
 
-.hero-content{ position:relative; z-index:4; padding:90px 20px 0; }
+.hero-content{
+  position:relative; z-index:4; padding:90px 20px 0;
+  display:flex; align-items:center; justify-content:center; gap:56px; flex-wrap:wrap;
+}
+.hero-profile{ display:flex; flex-direction:column; align-items:center; text-align:center; }
+.hero-socials{ display:flex; flex-direction:column; gap:12px; order:-1; }
+
+@media (max-width:680px){
+  .hero-content{ flex-direction:column; gap:26px; padding-top:70px; }
+  .hero-socials{ flex-direction:row; flex-wrap:wrap; justify-content:center; order:2; max-width:280px; }
+}
+
+.social-icon{
+  width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:rgba(191,232,242,.08); border:1px solid rgba(191,232,242,.22); backdrop-filter:blur(3px);
+  text-decoration:none; transition:transform .15s ease, background .15s ease; overflow:hidden;
+}
+.social-icon:hover{ transform:translateY(-2px) scale(1.06); background:rgba(191,232,242,.16); }
+.social-icon img{ width:100%; height:100%; object-fit:cover; }
+.social-badge{ font-size:11px; font-weight:800; color:var(--frost); letter-spacing:.02em; }
+
 .avatar-ring{
   width:132px; height:132px; border-radius:50%; margin:0 auto 18px;
   padding:5px; background:conic-gradient(from 0deg, var(--ice), var(--gold), var(--candy), var(--ice));
@@ -222,6 +242,34 @@ button{ font-family:inherit; }
 @keyframes toast-in{ from{ opacity:0; transform:translateY(24px);} to{ opacity:1; transform:none;} }
 @keyframes toast-out{ to{ opacity:0; transform:translateY(10px); } }
 @keyframes toast-shine{ from{ transform:translateX(-120%) rotate(8deg);} to{ transform:translateX(220%) rotate(8deg);} }
+
+/* Цветовые варианты тоста по типу события */
+.toast.type-up::before{ background:linear-gradient(90deg, #5fd68a, #bff2d1); }
+.toast.type-up .toast-icon-box{ background:linear-gradient(145deg, #6fe0a0, #2f8a55); }
+.toast.type-down::before{ background:linear-gradient(90deg, #e0687a, #f2b8c2); }
+.toast.type-down .toast-icon-box{ background:linear-gradient(145deg, #e07f8f, #8a2f42); }
+.toast.type-comment::before{ background:linear-gradient(90deg, #67c1f5, #a4d7f5); }
+.toast.type-comment .toast-icon-box{ background:linear-gradient(145deg, #7fd4e6, #2f6a7a); }
+.toast.type-reply::before{ background:linear-gradient(90deg, #c98fe0, #e6c8f5); }
+.toast.type-reply .toast-icon-box{ background:linear-gradient(145deg, #c98fe0, #6a2f8a); }
+.toast.type-neutral::before{ background:linear-gradient(90deg, #9aa3cf, #cfd6ef); }
+.toast.type-neutral .toast-icon-box{ background:linear-gradient(145deg, #9aa3cf, #4a527a); }
+
+/* ===================== Взрыв частиц при голосовании ===================== */
+.burst-particle{
+  position:fixed; width:6px; height:6px; border-radius:50%; pointer-events:none; z-index:200;
+  animation:burst-fly .65s ease-out forwards; box-shadow:0 0 7px currentColor;
+}
+@keyframes burst-fly{
+  from{ transform:translate(-50%,-50%) scale(1); opacity:1; }
+  to{ transform:translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(.25); opacity:0; }
+}
+
+/* Вспышка рамки карточки в цвет голоса */
+.comment-card.flash-up{ animation:flash-up .6s ease; }
+.comment-card.flash-down{ animation:flash-down .6s ease; }
+@keyframes flash-up{ 0%{ box-shadow:0 0 0 2px var(--up); } 100%{ box-shadow:0 0 0 0 transparent; } }
+@keyframes flash-down{ 0%{ box-shadow:0 0 0 2px var(--down); } 100%{ box-shadow:0 0 0 0 transparent; } }
 
 /* ===================== /activ page ===================== */
 .activ-page{ max-width:900px; margin:0 auto; padding:24px 16px 60px; }

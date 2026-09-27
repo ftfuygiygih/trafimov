@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const AVATAR_DIR = path.join(__dirname, 'avatar-source');
 const SOUND_DIR = path.join(__dirname, 'sound-source');
+const SOCIAL_ICONS_DIR = path.join(__dirname, 'social-icons');
 const COMMENTS_FILE = path.join(DATA_DIR, 'comments.json');
 const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
 
@@ -140,6 +141,55 @@ app.get('/notify-sound', (req, res) => {
   } catch (e) {
     res.status(404).end();
   }
+});
+
+// ---------- Соцсети: ссылки из socials.json + иконки из social-icons/ ----------
+// file — какое имя файла (без расширения) искать в social-icons/; badge — подпись-заглушка,
+// если файла нет (например social-icons/t.png для телеграма).
+const SOCIAL_DEFS = {
+  telegram: { label: 'Telegram', file: 't', badge: 'TG' },
+  telegram_channel: { label: 'Telegram-канал', file: 'tc', badge: 'TG' },
+  spotify: { label: 'Spotify', file: 's', badge: 'SP' },
+  x: { label: 'X (Twitter)', file: 'x', badge: 'X' },
+  pinterest: { label: 'Pinterest', file: 'p', badge: 'P' },
+  brawlstars: { label: 'Brawl Stars', file: 'b', badge: 'BS' },
+  discord: { label: 'Discord', file: 'd', badge: 'DC' },
+  tiktok: { label: 'TikTok', file: 'tk', badge: 'TT' }
+};
+
+function findIconFile(fileCode) {
+  try {
+    const match = fs.readdirSync(SOCIAL_ICONS_DIR)
+      .find(f => new RegExp(`^${fileCode}\\.(png|jpe?g|webp|svg)$`, 'i').test(f));
+    return match ? path.join(SOCIAL_ICONS_DIR, match) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+app.get('/api/socials', (req, res) => {
+  const links = readJSON(path.join(__dirname, 'socials.json'), {});
+  const list = Object.keys(SOCIAL_DEFS)
+    .map(key => {
+      const url = (links[key] || '').toString().trim();
+      if (!url) return null;
+      const def = SOCIAL_DEFS[key];
+      return { key, label: def.label, badge: def.badge, url, hasIcon: !!findIconFile(def.file) };
+    })
+    .filter(Boolean);
+  res.json({ socials: list });
+});
+
+app.get('/social-icon/:key', (req, res) => {
+  const def = SOCIAL_DEFS[req.params.key];
+  if (!def) return res.status(404).end();
+  const filePath = findIconFile(def.file);
+  if (!filePath) return res.status(404).end();
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = { '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml' }[ext] || 'image/jpeg';
+  res.set('Content-Type', mime);
+  res.set('Cache-Control', 'no-cache');
+  fs.createReadStream(filePath).pipe(res);
 });
 
 // ---------- Конфиг (имя владельца) ----------
