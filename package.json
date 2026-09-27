@@ -1,0 +1,15 @@
+{
+  "name": "vk-wall",
+  "version": "1.0.0",
+  "description": "Личная «стена» как во ВКонтакте: гостевая книга с комментариями, лайками/дизлайками и логом посещений",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
