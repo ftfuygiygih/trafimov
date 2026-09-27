@@ -10,6 +10,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const AVATAR_DIR = path.join(__dirname, 'avatar-source');
+const SOUND_DIR = path.join(__dirname, 'sound-source');
 const COMMENTS_FILE = path.join(DATA_DIR, 'comments.json');
 const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
 
@@ -125,6 +126,22 @@ app.get('/avatar.png', (req, res) => {
   }
 });
 
+// ---------- Звук уведомлений: берём любой файл из sound-source/ ----------
+app.get('/notify-sound', (req, res) => {
+  try {
+    const files = fs.readdirSync(SOUND_DIR).filter(f => /\.(mp3|wav|ogg|m4a)$/i.test(f));
+    if (files.length === 0) return res.status(404).end();
+    const filePath = path.join(SOUND_DIR, files[0]);
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4' }[ext];
+    res.set('Content-Type', mime);
+    res.set('Cache-Control', 'no-cache');
+    fs.createReadStream(filePath).pipe(res);
+  } catch (e) {
+    res.status(404).end();
+  }
+});
+
 // ---------- Конфиг (имя владельца) ----------
 app.get('/api/config', (req, res) => {
   const cfg = readJSON(path.join(__dirname, 'config.json'), { ownerName: 'Владелец страницы' });
@@ -136,7 +153,7 @@ app.get('/api/comments', (req, res) => {
   const ip = clientIp(req);
   res.json({
     comments: comments.map(c => ({
-      id: c.id, name: c.name, text: c.text, ts: c.ts,
+      id: c.id, parentId: c.parentId || null, name: c.name, text: c.text, ts: c.ts,
       up: c.up, down: c.down, myVote: c.votes[ip] || null
     })),
     cooldownRemainingMs: cooldownRemaining(ip)
@@ -156,13 +173,16 @@ app.post('/api/comments', (req, res) => {
   if (remaining > 0) {
     return res.status(429).json({ ok: false, error: 'Слишком часто', retryAfterMs: remaining });
   }
-  let { name, text } = req.body || {};
+  let { name, text, parentId } = req.body || {};
   name = (name || '').toString().trim().slice(0, MAX_NAME_LEN);
   text = (text || '').toString().trim().slice(0, MAX_TEXT_LEN);
   if (!name || !text) return res.status(400).json({ ok: false, error: 'Заполните имя и комментарий' });
 
+  parentId = (typeof parentId === 'string' && comments.some(c => c.id === parentId)) ? parentId : null;
+
   const comment = {
     id: 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    parentId,
     name: escapeHtml(name),
     text: escapeHtml(text),
     ts: Date.now(),
