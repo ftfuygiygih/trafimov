@@ -82,14 +82,17 @@
         <div id="cooldown-note" class="cooldown-note hidden"></div>
       </form>
 
+      <div class="sort-row">
+        <button class="sort-btn active" data-sort="new">Новые</button>
+        <button class="sort-btn" data-sort="top">Популярные</button>
+      </div>
+
       <div id="comments-list" class="comments-list"></div>
       <div id="comments-empty" class="comments-empty hidden">Пока пусто — будьте первым, кто напишет здесь ❄</div>
     </div>
   </main>
 
-  <footer class="wall-footer">
-    <a href="/activ">Журнал посещений</a>
-  </footer>
+  <div id="toast-container" class="toast-container"></div>
 
   <script src="/client.js"></script>
 </body>

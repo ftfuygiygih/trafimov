@@ -155,7 +155,33 @@
     document.title = cfg.ownerName + ' — стена';
   }).catch(() => { $('owner-name').textContent = 'Стена'; });
 
-  // ================= Комментарии =================
+  // ================= Тосты (Steam-style) + звук уведомлений =================
+  const toastContainer = $('toast-container');
+  function showToast(title, subtitle, icon) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `
+      <div class="toast-game-row"><span class="dot"></span>Стена</div>
+      <div class="toast-body">
+        <div class="toast-icon-box">${icon || '❄'}</div>
+        <div class="toast-text-col">
+          <div class="toast-title">${title}</div>
+          <div class="toast-sub">${subtitle || ''}</div>
+        </div>
+      </div>`;
+    toastContainer.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+  }
+  function playNotifySound() {
+    const audio = new Audio('/notify-sound');
+    audio.play().catch(() => {}); // если звук не загружен в sound-source/ — просто молчим
+  }
+  function notify(title, subtitle, icon) {
+    showToast(title, subtitle, icon);
+    playNotifySound();
+  }
+
+  // ================= Комментарии (+ ответы, сортировка) =================
   const commentsList = $('comments-list');
   const commentsEmpty = $('comments-empty');
   const form = $('comment-form');
@@ -164,10 +190,21 @@
   const submitBtn = $('submit-btn');
   const formError = $('form-error');
   const cooldownNote = $('cooldown-note');
+  const sortBtns = document.querySelectorAll('.sort-btn');
 
   let cooldownInterval = null;
+  let lastComments = [];
+  let currentSort = 'new';
   const savedName = localStorage.getItem('wall-name');
   if (savedName) nameInput.value = savedName;
+
+  sortBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentSort = btn.dataset.sort;
+      sortBtns.forEach(b => b.classList.toggle('active', b === btn));
+      renderComments(lastComments);
+    });
+  });
 
   function fmtDate(ts) {
     const d = new Date(ts);
@@ -178,14 +215,41 @@
   }
 
   function renderComments(list) {
+    lastComments = list;
     commentsList.innerHTML = '';
-    commentsEmpty.classList.toggle('hidden', list.length > 0);
-    list.slice().reverse().forEach(c => commentsList.appendChild(buildCommentNode(c)));
+    const topLevel = list.filter(c => !c.parentId);
+    commentsEmpty.classList.toggle('hidden', topLevel.length > 0);
+
+    const sorted = topLevel.slice().sort((a, b) => {
+      if (currentSort === 'top') {
+        const scoreDiff = (b.up - b.down) - (a.up - a.down);
+        return scoreDiff !== 0 ? scoreDiff : b.ts - a.ts;
+      }
+      return b.ts - a.ts; // новые сверху
+    });
+
+    sorted.forEach(c => {
+      const replies = list.filter(r => r.parentId === c.id).sort((a, b) => a.ts - b.ts);
+      commentsList.appendChild(buildCommentNode(c, replies));
+    });
   }
 
-  function buildCommentNode(c) {
+  function buildCommentNode(c, replies) {
+    const card = buildCardOnly(c, false);
+
+    if (replies && replies.length) {
+      const repliesWrap = document.createElement('div');
+      repliesWrap.className = 'comment-replies';
+      replies.forEach(r => repliesWrap.appendChild(buildCardOnly(r, true)));
+      card.appendChild(repliesWrap);
+    }
+
+    return card;
+  }
+
+  function buildCardOnly(c, isReply) {
     const card = document.createElement('div');
-    card.className = 'comment-card';
+    card.className = 'comment-card' + (isReply ? ' reply' : '');
     card.dataset.id = c.id;
 
     const head = document.createElement('div');
@@ -215,16 +279,76 @@
     const downBtn = document.createElement('button');
     downBtn.className = 'vote-btn down' + (c.myVote === 'down' ? ' active' : '');
     downBtn.innerHTML = `👎 <span>${c.down}</span>`;
-
     upBtn.addEventListener('click', () => vote(c.id, 'up', upBtn, downBtn));
     downBtn.addEventListener('click', () => vote(c.id, 'down', upBtn, downBtn));
     votes.appendChild(upBtn); votes.appendChild(downBtn);
 
+    if (!isReply) {
+      const replyBtn = document.createElement('button');
+      replyBtn.className = 'reply-btn';
+      replyBtn.textContent = 'Ответить';
+      replyBtn.addEventListener('click', () => replyForm.classList.toggle('open'));
+      votes.appendChild(replyBtn);
+    }
+
     card.appendChild(head); card.appendChild(text); card.appendChild(votes);
+
+    let replyForm;
+    if (!isReply) {
+      replyForm = buildReplyForm(c.id);
+      card.appendChild(replyForm);
+    }
+
     return card;
   }
 
+  function buildReplyForm(parentId) {
+    const wrap = document.createElement('div');
+    wrap.className = 'reply-form';
+    const nameEl = document.createElement('input');
+    nameEl.type = 'text'; nameEl.placeholder = 'Ваше имя'; nameEl.maxLength = 40;
+    nameEl.value = localStorage.getItem('wall-name') || '';
+    const textEl = document.createElement('textarea');
+    textEl.placeholder = 'Ваш ответ…'; textEl.rows = 2; textEl.maxLength = 800;
+    const row = document.createElement('div');
+    row.className = 'form-row';
+    const err = document.createElement('span');
+    err.className = 'form-error';
+    const btn = document.createElement('button');
+    btn.type = 'submit'; btn.textContent = 'Ответить';
+    row.appendChild(err); row.appendChild(btn);
+    wrap.appendChild(nameEl); wrap.appendChild(textEl); wrap.appendChild(row);
+
+    btn.addEventListener('click', () => {
+      const name = nameEl.value.trim();
+      const text = textEl.value.trim();
+      err.textContent = '';
+      if (!name || !text) { err.textContent = 'Заполните оба поля'; return; }
+      localStorage.setItem('wall-name', name);
+      btn.disabled = true;
+      fetch('/api/comments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, text, parentId })
+      }).then(r => r.json()).then(res => {
+        btn.disabled = false;
+        if (!res.ok) {
+          err.textContent = res.error === 'Слишком часто' ? 'Подождите немного' : res.error;
+          if (res.retryAfterMs) startCooldown(res.retryAfterMs);
+          return;
+        }
+        textEl.value = '';
+        wrap.classList.remove('open');
+        loadComments();
+        startCooldown(res.cooldownRemainingMs);
+        notify('Ответ опубликован', 'Добавлен в тред', '↩');
+      }).catch(() => { btn.disabled = false; err.textContent = 'Ошибка сети'; });
+    });
+
+    return wrap;
+  }
+
   function vote(id, type, upBtn, downBtn) {
+    const wasActive = (type === 'up' ? upBtn : downBtn).classList.contains('active');
     fetch(`/api/comments/${id}/vote`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type })
     }).then(r => r.json()).then(res => {
@@ -233,6 +357,18 @@
       downBtn.querySelector('span').textContent = res.down;
       upBtn.classList.toggle('active', res.myVote === 'up');
       downBtn.classList.toggle('active', res.myVote === 'down');
+      if (wasActive) {
+        notify('Голос снят', 'Оценка обновлена', '↩');
+      } else {
+        notify(
+          type === 'up' ? 'Лайк поставлен' : 'Дизлайк поставлен',
+          'Оценка обновлена',
+          type === 'up' ? '👍' : '👎'
+        );
+      }
+      // держим локальный список в актуальном состоянии для пересортировки
+      const c = lastComments.find(x => x.id === id);
+      if (c) { c.up = res.up; c.down = res.down; c.myVote = res.myVote; }
     });
   }
 
@@ -289,6 +425,7 @@
       textInput.value = '';
       loadComments();
       startCooldown(res.cooldownRemainingMs);
+      notify('Комментарий опубликован', 'Запись появилась на стене', '✅');
     }).catch(() => { formError.textContent = 'Ошибка сети, попробуйте ещё раз'; submitBtn.disabled = false; });
   });
 
