@@ -16,20 +16,43 @@
     <div class="visit-table-wrap">
       <table class="visit-table">
         <thead>
-          <tr><th>Дата и время</th><th>IP</th><th>Устройство</th><th>Браузер</th><th>ОС</th><th>Страница</th></tr>
+          <tr>
+            <th>Дата и время</th><th>IP</th><th>Устройство</th><th>Браузер</th><th>ОС</th>
+            <th>Реферер</th><th>Язык</th><th>Часовой пояс</th><th>Экран</th><th>Вьюпорт</th><th>Страница</th>
+          </tr>
         </thead>
         <tbody id="visits-body"></tbody>
       </table>
     </div>
   </div>
   <script>
+    (function reportVisitDetail() {
+      const m = document.cookie.match(/(?:^|; )vid=([^;]*)/);
+      const vid = m ? decodeURIComponent(m[1]) : null;
+      if (!vid) return;
+      fetch('/api/visits/detail', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vid,
+          referrer: document.referrer || null,
+          language: navigator.language,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          screen: `${screen.width}x${screen.height}`,
+          viewport: `${window.innerWidth}x${window.innerHeight}`
+        })
+      }).catch(() => {});
+    })();
+
     fetch('/api/visits').then(r => r.json()).then(res => {
       document.getElementById('visits-count').textContent = res.visits.length + ' посещений всего';
       const tbody = document.getElementById('visits-body');
       res.visits.forEach(v => {
         const tr = document.createElement('tr');
         const date = new Date(v.ts).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        tr.innerHTML = `<td>${date}</td><td>${v.ip}</td><td>${v.device}</td><td>${v.browser}</td><td>${v.os}</td><td>${v.path}</td>`;
+        const short = (s, n) => s ? (s.length > n ? s.slice(0, n) + '…' : s) : '—';
+        tr.innerHTML = `<td>${date}</td><td>${v.ip}</td><td>${v.device}</td><td>${v.browser}</td><td>${v.os}</td>
+          <td>${short(v.referrer, 26)}</td><td>${v.language || '—'}</td><td>${v.timezone || '—'}</td>
+          <td>${v.screen || '—'}</td><td>${v.viewport || '—'}</td><td>${v.path}</td>`;
         tbody.appendChild(tr);
       });
     });

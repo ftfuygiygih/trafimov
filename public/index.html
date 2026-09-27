@@ -13,7 +13,12 @@
 
   <!-- ===================== ГЕРОЙ-БЛОК С ЗИМНИМ ФОНОМ ===================== -->
   <section class="hero">
+    <div class="moon"></div>
     <canvas id="snow-canvas"></canvas>
+
+    <svg class="frost-corner top-left" viewBox="0 0 220 220" aria-hidden="true"><use href="#frost-pattern"/></svg>
+    <svg class="frost-corner top-right" viewBox="0 0 220 220" aria-hidden="true"><use href="#frost-pattern"/></svg>
+
     <svg class="garland" viewBox="0 0 1200 90" preserveAspectRatio="none" aria-hidden="true">
       <path id="garland-wire" d="M0,20 C150,80 300,-10 450,40 C600,90 750,-10 900,40 C1000,75 1100,10 1200,30" />
     </svg>
@@ -31,6 +36,35 @@
       <span>Стена</span>
       <svg width="20" height="20" viewBox="0 0 20 20"><path d="M4 7l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
+
+    <!-- Сугроб со силуэтами ёлок и снеговика -->
+    <svg class="snow-ground" viewBox="0 0 1200 140" preserveAspectRatio="none" aria-hidden="true">
+      <path class="ground-fill" d="M0,70 C120,40 220,90 340,60 C460,30 560,80 700,55 C840,30 940,75 1080,50 C1150,38 1180,55 1200,60 L1200,140 L0,140 Z" />
+      <g class="ground-silhouettes" fill="#0a0f22" opacity="0.9">
+        <path d="M90,72 L120,20 L150,72 Z M100,60 L140,60 M95,50 L145,50" stroke="#0a0f22" stroke-width="4"/>
+        <path d="M1040,75 L1065,32 L1090,75 Z M1048,64 L1082,64 M1044,54 L1086,54" stroke="#0a0f22" stroke-width="4"/>
+        <circle cx="960" cy="88" r="16"/>
+        <circle cx="960" cy="62" r="11"/>
+        <circle cx="960" cy="42" r="8"/>
+      </g>
+    </svg>
+
+    <!-- Переиспользуемый узор инея для углов -->
+    <svg width="0" height="0" style="position:absolute">
+      <defs>
+        <g id="frost-pattern" stroke="#bfe8f2" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.55">
+          <path d="M0,0 L60,60 M0,20 L40,60 M20,0 L60,40"/>
+          <path d="M8,8 L2,8 M8,8 L8,2 M8,8 L14,8 M8,8 L8,14"/>
+          <path d="M34,34 L26,34 M34,34 L34,26 M34,34 L42,34 M34,34 L34,42"/>
+          <path d="M55,55 L47,55 M55,55 L55,47 M55,55 L63,55 M55,55 L55,63"/>
+          <circle cx="0" cy="0" r="90" fill="url(#frost-fade)" stroke="none"/>
+        </g>
+        <radialGradient id="frost-fade" cx="0" cy="0" r="1">
+          <stop offset="0" stop-color="#bfe8f2" stop-opacity="0.18"/>
+          <stop offset="1" stop-color="#bfe8f2" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+    </svg>
   </section>
 
   <!-- ===================== СТЕНА ===================== -->

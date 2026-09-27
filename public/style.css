@@ -25,11 +25,26 @@ button{ font-family:inherit; }
     radial-gradient(ellipse 900px 500px at 50% -10%, rgba(127,212,230,.16), transparent 60%),
     linear-gradient(180deg, var(--night-1), var(--night-2) 55%, var(--night-3));
 }
-#snow-canvas{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+#snow-canvas{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; }
 
-.garland{ position:absolute; top:0; left:0; width:100%; height:70px; z-index:2; }
+.moon{
+  position:absolute; top:8%; right:10%; width:86px; height:86px; border-radius:50%; z-index:0;
+  background:radial-gradient(circle at 35% 35%, #fdf6e3, #f2e6b8 55%, transparent 75%);
+  box-shadow:0 0 70px 18px rgba(242,230,184,.22);
+}
+
+.frost-corner{ position:absolute; width:150px; height:150px; z-index:1; pointer-events:none; }
+.frost-corner.top-left{ top:0; left:0; }
+.frost-corner.top-right{ top:0; right:0; transform:scaleX(-1); }
+
+.snow-ground{ position:absolute; left:0; bottom:0; width:100%; height:120px; z-index:2; pointer-events:none; }
+.ground-fill{ fill:rgba(191,232,242,0.07); }
+.ground-silhouettes path{ fill:none; }
+.ground-silhouettes circle{ opacity:.85; }
+
+.garland{ position:absolute; top:0; left:0; width:100%; height:70px; z-index:3; }
 #garland-wire{ fill:none; stroke:#2a3050; stroke-width:3; }
-.garland-bulbs{ position:absolute; top:0; left:0; width:100%; height:90px; z-index:3; pointer-events:none; }
+.garland-bulbs{ position:absolute; top:0; left:0; width:100%; height:110px; z-index:4; pointer-events:none; }
 .bulb{
   position:absolute; width:11px; height:15px; border-radius:50% 50% 60% 60%;
   transform:translate(-50%,-30%);
@@ -39,6 +54,23 @@ button{ font-family:inherit; }
   content:''; position:absolute; inset:-6px; border-radius:50%; background:inherit; filter:blur(6px); opacity:.55;
 }
 @keyframes twinkle{ 0%,100%{ opacity:.55; filter:brightness(1);} 50%{ opacity:1; filter:brightness(1.5);} }
+
+.ornament{
+  position:absolute; width:18px; height:18px; border-radius:50%; transform:translate(-50%,-20%);
+  box-shadow:inset -3px -3px 5px rgba(0,0,0,.35), inset 2px 3px 4px rgba(255,255,255,.45);
+}
+.ornament::before{
+  content:''; position:absolute; top:-4px; left:50%; width:5px; height:5px; margin-left:-2.5px;
+  background:#d9c98a; border-radius:2px;
+}
+
+.icicle{
+  position:absolute; top:0; width:6px; opacity:.8;
+  background:linear-gradient(180deg, rgba(191,232,242,.85), rgba(191,232,242,.15));
+  clip-path:polygon(0 0, 100% 0, 50% 100%);
+  animation:icicle-shimmer 3.4s ease-in-out infinite;
+}
+@keyframes icicle-shimmer{ 0%,100%{ opacity:.6;} 50%{ opacity:.95;} }
 
 .hero-content{ position:relative; z-index:4; padding:90px 20px 0; }
 .avatar-ring{
