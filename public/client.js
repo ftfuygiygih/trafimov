@@ -180,6 +180,90 @@
     });
   }).catch(() => {});
 
+  // ================= Аватары комментаторов (выбор из готовых) =================
+  let availableAvatars = [];
+  let selectedAvatar = localStorage.getItem('wall-avatar') || null;
+  const avatarPickBtn = $('avatar-pick-btn');
+  const avatarPickPreview = $('avatar-pick-preview');
+  const avatarPickPlus = $('avatar-pick-plus');
+  const avatarPicker = $('avatar-picker');
+  const avatarWarningModal = $('avatar-warning-modal');
+  const avatarWarningPicker = $('avatar-warning-picker');
+  const avatarWarningClose = $('avatar-warning-close');
+
+  function renderAvatarPreview() {
+    if (selectedAvatar) {
+      avatarPickPreview.src = '/comment-avatars/' + selectedAvatar;
+      avatarPickPreview.classList.remove('hidden');
+      avatarPickPlus.classList.add('hidden');
+    } else {
+      avatarPickPreview.classList.add('hidden');
+      avatarPickPlus.classList.remove('hidden');
+    }
+  }
+
+  function buildAvatarGrid(container, onPick) {
+    container.innerHTML = '';
+    availableAvatars.forEach(file => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = file === selectedAvatar ? 'selected' : '';
+      const img = document.createElement('img');
+      img.src = '/comment-avatars/' + file;
+      btn.appendChild(img);
+      btn.addEventListener('click', () => {
+        selectedAvatar = file;
+        localStorage.setItem('wall-avatar', file);
+        renderAvatarPreview();
+        container.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        if (onPick) onPick();
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  fetch('/api/comment-avatars').then(r => r.json()).then(res => {
+    availableAvatars = res.avatars || [];
+    renderAvatarPreview();
+    buildAvatarGrid(avatarPicker);
+  }).catch(() => {});
+
+  avatarPickBtn.addEventListener('click', () => avatarPicker.classList.toggle('hidden'));
+
+  function showAvatarWarning() {
+    buildAvatarGrid(avatarWarningPicker, () => {
+      avatarWarningModal.classList.add('hidden');
+    });
+    avatarWarningModal.classList.remove('hidden');
+  }
+  avatarWarningClose.addEventListener('click', () => avatarWarningModal.classList.add('hidden'));
+  avatarWarningModal.addEventListener('click', (e) => { if (e.target === avatarWarningModal) avatarWarningModal.classList.add('hidden'); });
+
+  // ================= Архив старых записей =================
+  const archiveToggleBtn = $('archive-toggle-btn');
+  const archivePanel = $('archive-panel');
+  const archiveList = $('archive-list');
+  const archiveEmpty = $('archive-empty');
+  let archiveLoaded = false;
+
+  archiveToggleBtn.addEventListener('click', () => {
+    archivePanel.classList.toggle('hidden');
+    if (!archivePanel.classList.contains('hidden') && !archiveLoaded) {
+      archiveLoaded = true;
+      fetch('/api/archive').then(r => r.json()).then(res => {
+        const entries = res.entries || [];
+        archiveEmpty.classList.toggle('hidden', entries.length > 0);
+        entries.forEach(e => {
+          const item = document.createElement('div');
+          item.className = 'archive-item';
+          item.innerHTML = `<span class="a-name">${e.name}</span><span class="a-date">${e.date}</span><div class="a-text">${e.text}</div>`;
+          archiveList.appendChild(item);
+        });
+      }).catch(() => { archiveEmpty.classList.remove('hidden'); });
+    }
+  });
+
   // ================= Тосты (Steam-style) + звук уведомлений =================
   const toastContainer = $('toast-container');
   function showToast(title, subtitle, icon, type) {
@@ -307,7 +391,15 @@
     head.className = 'comment-head';
     const av = document.createElement('div');
     av.className = 'comment-avatar';
-    av.textContent = initials(c.name);
+    if (c.avatar) {
+      const avImg = document.createElement('img');
+      avImg.src = '/comment-avatars/' + c.avatar;
+      avImg.style.cssText = 'width:100%;height:100%;border-radius:50%;object-fit:cover;';
+      av.style.background = 'transparent';
+      av.appendChild(avImg);
+    } else {
+      av.textContent = initials(c.name);
+    }
     const meta = document.createElement('div');
     const name = document.createElement('div');
     name.className = 'comment-name';
@@ -320,7 +412,15 @@
 
     const text = document.createElement('div');
     text.className = 'comment-text';
-    text.innerHTML = c.text; // экранировано на сервере
+    if (c.flagged) {
+      const spoiler = document.createElement('span');
+      spoiler.className = 'spoiler';
+      spoiler.textContent = c.text;
+      spoiler.addEventListener('click', () => spoiler.classList.toggle('revealed'));
+      text.appendChild(spoiler);
+    } else {
+      text.innerHTML = c.text; // экранировано на сервере
+    }
 
     const votes = document.createElement('div');
     votes.className = 'vote-row';
@@ -375,11 +475,12 @@
       const text = textEl.value.trim();
       err.textContent = '';
       if (!name || !text) { err.textContent = 'Заполните оба поля'; return; }
+      if (!selectedAvatar) { showAvatarWarning(); return; }
       localStorage.setItem('wall-name', name);
       btn.disabled = true;
       fetch('/api/comments', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, text, parentId })
+        body: JSON.stringify({ name, text, parentId, avatar: selectedAvatar })
       }).then(r => r.json()).then(res => {
         btn.disabled = false;
         if (!res.ok) {
@@ -471,10 +572,11 @@
     const name = nameInput.value.trim();
     const text = textInput.value.trim();
     if (!name || !text) { formError.textContent = 'Заполните оба поля'; return; }
+    if (!selectedAvatar) { showAvatarWarning(); return; }
     submitBtn.disabled = true;
     localStorage.setItem('wall-name', name);
     fetch('/api/comments', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, text })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, text, avatar: selectedAvatar })
     }).then(r => r.json()).then(res => {
       if (!res.ok) {
         formError.textContent = res.error === 'Слишком часто' ? 'Подождите немного перед следующим комментарием' : res.error;

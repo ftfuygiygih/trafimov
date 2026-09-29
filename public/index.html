@@ -74,8 +74,24 @@
   <main class="wall">
     <div class="wall-inner">
 
+      <button type="button" id="archive-toggle-btn" class="archive-toggle-btn">🗂 Архив старых записей</button>
+
+      <div id="archive-panel" class="archive-panel hidden">
+        <p class="archive-warning">Вы не можете отвечать или ставить оценку записям из архива — они перенесены сюда по техническим причинам и хранятся только для истории.</p>
+        <div id="archive-list" class="archive-list"></div>
+        <div id="archive-empty" class="archive-empty hidden">Архив пока пуст.</div>
+      </div>
+
       <form id="comment-form" class="comment-form">
         <h2>Оставить запись</h2>
+        <div class="avatar-pick-row">
+          <button type="button" id="avatar-pick-btn" class="avatar-pick-btn">
+            <img id="avatar-pick-preview" class="hidden" alt="" />
+            <span id="avatar-pick-plus">+</span>
+          </button>
+          <div class="avatar-pick-hint">Выберите аватар</div>
+        </div>
+        <div id="avatar-picker" class="avatar-picker hidden"></div>
         <input type="text" id="name-input" placeholder="Ваше имя" maxlength="40" autocomplete="off" />
         <textarea id="text-input" placeholder="Что хотите написать…" maxlength="800" rows="3"></textarea>
         <div class="form-row">
@@ -96,6 +112,16 @@
   </main>
 
   <div id="toast-container" class="toast-container"></div>
+
+  <!-- ===================== Предупреждение: не выбран аватар ===================== -->
+  <div id="avatar-warning-modal" class="modal-overlay hidden">
+    <div class="warning-modal">
+      <div class="warning-title">СТОООЙ 🛑</div>
+      <p>Выбери аватарку перед тем как опубликовать</p>
+      <div id="avatar-warning-picker" class="avatar-picker"></div>
+      <button type="button" id="avatar-warning-close" class="icon-btn small">Закрыть</button>
+    </div>
+  </div>
 
   <script src="/client.js"></script>
 </body>
