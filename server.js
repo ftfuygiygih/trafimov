@@ -1,8 +1,10 @@
-// server.js — «Стена» (гостевая книга): комментарии + лайки/дизлайки + лог посещений (/activ)
+// server.js — «Стена» (гостевая книга): комментарии + лайки/дизлайки + лог посещений (/activ) + админка
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+let geoip = null;
+try { geoip = require('geoip-lite'); } catch (e) { /* npm install ещё не запускали — geo-раздел просто покажет предупреждение */ }
 
 const app = express();
 app.use(express.json());
@@ -12,6 +14,10 @@ const DATA_DIR = path.join(__dirname, 'data');
 const AVATAR_DIR = path.join(__dirname, 'avatar-source');
 const SOUND_DIR = path.join(__dirname, 'sound-source');
 const SOCIAL_ICONS_DIR = path.join(__dirname, 'social-icons');
+const COMMENT_AVATARS_DIR = path.join(__dirname, 'commenter-avatars');
+const ARCHIVE_DIR = path.join(__dirname, 'archive');
+const BANWORDS_FILE = path.join(__dirname, 'banwords.txt');
+const ADMIN_CONFIG_FILE = path.join(__dirname, 'admin.json');
 const COMMENTS_FILE = path.join(DATA_DIR, 'comments.json');
 const VISITS_FILE = path.join(DATA_DIR, 'visits.json');
 
@@ -19,6 +25,8 @@ const COOLDOWN_MS = 60 * 1000; // 1 комментарий в минуту
 const MAX_NAME_LEN = 40;
 const MAX_TEXT_LEN = 800;
 const MAX_VISITS_STORED = 5000; // не даём логу расти бесконечно
+const FLAGGED_TEXT = 'Злой комментарий содержащий оскорбление :D';
+const LINK_REGEX = /(https?:\/\/|www\.)[^\s]+/i;
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -98,6 +106,69 @@ function parseCookies(req) {
   return out;
 }
 
+// ---------- Админка: пароль ----------
+// Приоритет: переменная окружения ADMIN_PASSWORD (безопасно для продакшена, не в git),
+// иначе admin.json (удобно локально, но НЕ коммить в публичный репозиторий — он в .gitignore по умолчанию).
+function getAdminPassword() {
+  if (process.env.ADMIN_PASSWORD) return process.env.ADMIN_PASSWORD;
+  const cfg = readJSON(ADMIN_CONFIG_FILE, { password: null });
+  return cfg.password || null;
+}
+function requireAdmin(req, res, next) {
+  const real = getAdminPassword();
+  const given = req.headers['x-admin-password'];
+  if (!real) return res.status(500).json({ ok: false, error: 'Пароль администратора не настроен (ADMIN_PASSWORD или admin.json)' });
+  if (given !== real) return res.status(401).json({ ok: false, error: 'Неверный пароль' });
+  next();
+}
+
+// ---------- Бан-слова + ссылки: автоматическая пометка комментария ----------
+function loadBanwords() {
+  try {
+    return fs.readFileSync(BANWORDS_FILE, 'utf8')
+      .split('\n')
+      .map(w => w.trim().toLowerCase())
+      .filter(w => w && !w.startsWith('#'));
+  } catch (e) {
+    return [];
+  }
+}
+function isFlagged(rawText) {
+  if (LINK_REGEX.test(rawText)) return true;
+  const lower = rawText.toLowerCase();
+  return loadBanwords().some(w => w && lower.includes(w));
+}
+
+// ---------- Флаг страны по IP (для /admin) ----------
+function flagEmoji(code) {
+  if (!code || code.length !== 2) return '🏳️';
+  const chars = code.toUpperCase().split('').map(c => 127397 + c.charCodeAt(0));
+  return String.fromCodePoint(...chars);
+}
+
+// ---------- Архив: парсинг .txt файлов из archive/ ----------
+// Формат блока (блоки разделяются строкой из "---"):
+//   Имя: Автор
+//   Дата: 2026-01-01
+//   Текст: текст комментария,
+//   может быть в несколько строк
+function parseArchiveFile(content) {
+  return content.split(/\r?\n-{3,}\r?\n/).map(block => {
+    const lines = block.replace(/\r/g, '').split('\n');
+    let name = 'Аноним', date = '', textLines = [], inText = false;
+    lines.forEach(line => {
+      const mName = line.match(/^\s*(имя|name)\s*:\s*(.*)$/i);
+      const mDate = line.match(/^\s*(дата|date)\s*:\s*(.*)$/i);
+      const mText = line.match(/^\s*(текст|text)\s*:\s*(.*)$/i);
+      if (mName) { name = mName[2].trim() || name; }
+      else if (mDate) { date = mDate[2].trim(); }
+      else if (mText) { inText = true; textLines.push(mText[2]); }
+      else if (inText) { textLines.push(line); }
+    });
+    return { name: escapeHtml(name), date: escapeHtml(date), text: escapeHtml(textLines.join('\n').trim()) };
+  }).filter(e => e.text);
+}
+
 // ---------- Страницы (с логированием посещений) ----------
 app.get(['/', '/activ'], (req, res, next) => {
   const vid = logVisit(req);
@@ -109,6 +180,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/activ', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'activ.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // ---------- Аватар: берём любой png/jpg из avatar-source/ ----------
@@ -198,13 +273,42 @@ app.get('/api/config', (req, res) => {
   res.json({ ownerName: cfg.ownerName || 'Владелец страницы' });
 });
 
+// ---------- Аватары комментаторов: список файлов из commenter-avatars/ ----------
+app.get('/api/comment-avatars', (req, res) => {
+  try {
+    const files = fs.readdirSync(COMMENT_AVATARS_DIR).filter(f => /\.(png|jpe?g|webp)$/i.test(f));
+    res.json({ avatars: files });
+  } catch (e) {
+    res.json({ avatars: [] });
+  }
+});
+app.use('/comment-avatars', express.static(COMMENT_AVATARS_DIR));
+
+// ---------- Архив старых/удалённых комментариев (см. archive/*.txt) ----------
+app.get('/api/archive', (req, res) => {
+  try {
+    const files = fs.readdirSync(ARCHIVE_DIR).filter(f => f.endsWith('.txt') && !f.startsWith('_'));
+    let entries = [];
+    files.forEach(f => {
+      const content = fs.readFileSync(path.join(ARCHIVE_DIR, f), 'utf8');
+      entries = entries.concat(parseArchiveFile(content));
+    });
+    res.json({ ok: true, entries });
+  } catch (e) {
+    res.json({ ok: true, entries: [] });
+  }
+});
+
 // ---------- Комментарии ----------
 app.get('/api/comments', (req, res) => {
   const ip = clientIp(req);
   res.json({
     comments: comments.map(c => ({
-      id: c.id, parentId: c.parentId || null, name: c.name, text: c.text, ts: c.ts,
-      up: c.up, down: c.down, myVote: c.votes[ip] || null
+      id: c.id, parentId: c.parentId || null, name: c.name,
+      text: c.flagged ? FLAGGED_TEXT : c.text,
+      flagged: !!c.flagged,
+      avatar: c.avatar || null,
+      ts: c.ts, up: c.up, down: c.down, myVote: c.votes[ip] || null
     })),
     cooldownRemainingMs: cooldownRemaining(ip)
   });
@@ -217,24 +321,41 @@ function cooldownRemaining(ip) {
   return remaining > 0 ? remaining : 0;
 }
 
+function validAvatarFile(avatar) {
+  if (!avatar || typeof avatar !== 'string') return null;
+  try {
+    const files = fs.readdirSync(COMMENT_AVATARS_DIR);
+    return files.includes(avatar) ? avatar : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 app.post('/api/comments', (req, res) => {
   const ip = clientIp(req);
   const remaining = cooldownRemaining(ip);
   if (remaining > 0) {
     return res.status(429).json({ ok: false, error: 'Слишком часто', retryAfterMs: remaining });
   }
-  let { name, text, parentId } = req.body || {};
+  let { name, text, parentId, avatar } = req.body || {};
   name = (name || '').toString().trim().slice(0, MAX_NAME_LEN);
   text = (text || '').toString().trim().slice(0, MAX_TEXT_LEN);
   if (!name || !text) return res.status(400).json({ ok: false, error: 'Заполните имя и комментарий' });
 
+  const avatarFile = validAvatarFile(avatar);
+  if (!avatarFile) return res.status(400).json({ ok: false, error: 'Выберите аватар' });
+
   parentId = (typeof parentId === 'string' && comments.some(c => c.id === parentId)) ? parentId : null;
+  const flagged = isFlagged(text);
 
   const comment = {
     id: 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
     parentId,
     name: escapeHtml(name),
     text: escapeHtml(text),
+    flagged,
+    avatar: avatarFile,
+    ip,
     ts: Date.now(),
     up: 0, down: 0,
     votes: {}
@@ -243,7 +364,15 @@ app.post('/api/comments', (req, res) => {
   writeJSON(COMMENTS_FILE, comments);
   lastCommentByIp.set(ip, Date.now());
 
-  res.json({ ok: true, comment: { ...comment, votes: undefined, myVote: null }, cooldownRemainingMs: COOLDOWN_MS });
+  res.json({
+    ok: true,
+    comment: {
+      id: comment.id, parentId: comment.parentId, name: comment.name,
+      text: flagged ? FLAGGED_TEXT : comment.text, flagged, avatar: comment.avatar,
+      ts: comment.ts, up: 0, down: 0, myVote: null
+    },
+    cooldownRemainingMs: COOLDOWN_MS
+  });
 });
 
 app.post('/api/comments/:id/vote', (req, res) => {
@@ -297,6 +426,61 @@ app.get('/api/visits', (req, res) => {
       timezone: v.timezone || null, screen: v.screen || null, viewport: v.viewport || null
     }))
   });
+});
+
+// ---------- Админка ----------
+app.post('/api/admin/login', (req, res) => {
+  const real = getAdminPassword();
+  if (!real) return res.status(500).json({ ok: false, error: 'Пароль администратора не настроен (ADMIN_PASSWORD или admin.json)' });
+  const { password } = req.body || {};
+  if (password !== real) return res.status(401).json({ ok: false, error: 'Неверный пароль' });
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/comments', requireAdmin, (req, res) => {
+  res.json({
+    ok: true,
+    comments: comments.map(c => ({
+      id: c.id, parentId: c.parentId, name: c.name, text: c.text, flagged: !!c.flagged,
+      avatar: c.avatar || null, ip: c.ip || null, ts: c.ts, up: c.up, down: c.down
+    }))
+  });
+});
+
+app.put('/api/admin/comments/:id', requireAdmin, (req, res) => {
+  const c = comments.find(x => x.id === req.params.id);
+  if (!c) return res.status(404).json({ ok: false, error: 'Комментарий не найден' });
+  let { name, text } = req.body || {};
+  if (typeof name === 'string' && name.trim()) c.name = escapeHtml(name.trim().slice(0, MAX_NAME_LEN));
+  if (typeof text === 'string' && text.trim()) {
+    const t = text.trim().slice(0, MAX_TEXT_LEN);
+    c.text = escapeHtml(t);
+    c.flagged = isFlagged(t);
+  }
+  writeJSON(COMMENTS_FILE, comments);
+  res.json({ ok: true, comment: { id: c.id, name: c.name, text: c.text, flagged: !!c.flagged } });
+});
+
+app.delete('/api/admin/comments/:id', requireAdmin, (req, res) => {
+  const id = req.params.id;
+  const before = comments.length;
+  comments = comments.filter(c => c.id !== id && c.parentId !== id); // вместе с ответами на него
+  writeJSON(COMMENTS_FILE, comments);
+  res.json({ ok: true, removed: before - comments.length });
+});
+
+app.get('/api/admin/geo', requireAdmin, (req, res) => {
+  if (!geoip) return res.json({ ok: false, error: 'Модуль geoip-lite не установлен — выполните npm install' });
+  const counts = {};
+  visits.forEach(v => {
+    const info = geoip.lookup(v.ip);
+    const code = (info && info.country) || 'XX';
+    counts[code] = (counts[code] || 0) + 1;
+  });
+  const countries = Object.entries(counts)
+    .map(([code, count]) => ({ code, count, flag: flagEmoji(code) }))
+    .sort((a, b) => b.count - a.count);
+  res.json({ ok: true, countries, total: visits.length });
 });
 
 app.listen(PORT, () => {
